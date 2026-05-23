@@ -28,6 +28,11 @@ const initialJurisdictions: Record<Jurisdiction, JurisdictionState> = {
   BR: "idle",
 };
 
+type DetectedDevice = {
+  form_factor: string;
+  radios: Array<{ chip: string; type: string; freq_mhz: number; power_dbm: number }>;
+};
+
 export default function Dashboard({ initialBom }: DashboardProps) {
   const [projectId, setProjectId] = useState<string>("");
   const [bomText, setBomText] = useState(initialBom);
@@ -38,10 +43,20 @@ export default function Dashboard({ initialBom }: DashboardProps) {
   const [setupEstimate, setSetupEstimate] = useState<SetupEstimate | null>(null);
   const [jurisdictions, setJurisdictions] = useState(initialJurisdictions);
   const [injectedEvents, setInjectedEvents] = useState<FeedEvent[]>([]);
+  const [detectedDevice, setDetectedDevice] = useState<DetectedDevice | null>(null);
   const sarRef = useRef<SARViewportHandle>(null);
   const anomalyIdRef = useRef(0);
 
   const handleAgentEvent = useCallback((event: FeedEvent) => {
+    if (event.event === "device_profile") {
+      setDetectedDevice({
+        form_factor: event.data.form_factor ?? "handset",
+        radios: Array.isArray(event.data.radios) ? event.data.radios : [],
+      });
+      if (event.data.device_name) setDeviceName(event.data.device_name);
+      setStatus(`Detected: ${event.data.device_name ?? "device"} (${event.data.form_factor ?? "unknown"})`);
+      return;
+    }
     const agent = typeof event.data.agent === "string" ? event.data.agent : "";
     const jurisdiction = jurisdictionAgents[agent];
     if (!jurisdiction) return;
@@ -162,6 +177,8 @@ export default function Dashboard({ initialBom }: DashboardProps) {
             setStatus("Scan complete");
           }}
           onAnomalyAlert={handleAnomalyAlert}
+          formFactor={detectedDevice?.form_factor}
+          radios={detectedDevice?.radios}
         />
       </section>
 
