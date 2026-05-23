@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from sar_monitor_agent import handle_sar_monitor
+from sar_monitor_live import handle_sar_monitor_live
 from sar_physics import stream_sar_grid
 
 # Load .env from project root (Lab_Pilot/) or this_repo/
@@ -64,3 +65,10 @@ async def sim_stream() -> StreamingResponse:
 async def sar_monitor_ws(ws: WebSocket) -> None:
     await ws.accept()
     await handle_sar_monitor(ws)
+
+
+@app.websocket("/sar-monitor-live")
+async def sar_monitor_live_ws(ws: WebSocket) -> None:
+    """Live API version — persistent bidirectional Gemini session."""
+    await ws.accept()
+    await handle_sar_monitor_live(ws)
