@@ -3,6 +3,14 @@ import { createServer } from "http";
 const events = [
   { event: "agent_start", data: { agent: "intake", message: "Parsing BOM..." }, delay: 400 },
   { event: "agent_complete", data: { agent: "intake", output: "nRF52840 BLE + RTL8723DE WiFi. Body-worn: true." }, delay: 1200 },
+  { event: "device_profile", data: {
+    device_name: "SmartPatch X1", form_factor: "wearable", body_worn: true, held_to_head: false,
+    radios: [
+      { chip: "Nordic nRF52840", type: "BLE", freq_mhz: 2440, power_dbm: 8 },
+      { chip: "Realtek RTL8723DE", type: "WiFi+BT", freq_mhz: 2412, power_dbm: 20 },
+    ],
+    target_regions: ["US", "EU", "CA", "JP", "BR"], notes: "Body-worn wearable, both radios in 2.4 GHz ISM band.",
+  }, delay: 1300 },
   { event: "agent_start", data: { agent: "jurisdiction_fcc", message: "Analyzing FCC Part 15..." }, delay: 1400 },
   { event: "agent_start", data: { agent: "jurisdiction_eu", message: "Analyzing EU RED..." }, delay: 1500 },
   { event: "agent_start", data: { agent: "jurisdiction_ca", message: "Analyzing ISED Canada..." }, delay: 1600 },
