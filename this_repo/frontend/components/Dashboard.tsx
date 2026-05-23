@@ -10,7 +10,7 @@ type DashboardProps = {
 };
 
 type Jurisdiction = "FCC" | "EU" | "CA" | "JP" | "BR";
-type JurisdictionState = "idle" | "active" | "complete";
+type JurisdictionState = "idle" | "active" | "complete" | "skipped";
 
 const jurisdictionAgents: Record<string, Jurisdiction> = {
   jurisdiction_fcc: "FCC",
@@ -31,6 +31,7 @@ const initialJurisdictions: Record<Jurisdiction, JurisdictionState> = {
 export default function Dashboard({ initialBom }: DashboardProps) {
   const [projectId, setProjectId] = useState<string>("");
   const [bomText, setBomText] = useState(initialBom);
+  const [deviceName, setDeviceName] = useState("SmartPatch X1");
   const [setupVerified, setSetupVerified] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
   const [status, setStatus] = useState("Idle");
@@ -42,10 +43,21 @@ export default function Dashboard({ initialBom }: DashboardProps) {
     const agent = typeof event.data.agent === "string" ? event.data.agent : "";
     const jurisdiction = jurisdictionAgents[agent];
     if (!jurisdiction) return;
-    setJurisdictions((current) => ({
-      ...current,
-      [jurisdiction]: event.event === "agent_complete" ? "complete" : "active",
-    }));
+    setJurisdictions((current) => {
+      let state: JurisdictionState = "active";
+      if (event.event === "agent_complete") {
+        const output = typeof event.data.output === "string" ? event.data.output : "";
+        if (output.startsWith("Not requested")) {
+          state = "skipped";
+        } else {
+          state = "complete";
+        }
+      }
+      return {
+        ...current,
+        [jurisdiction]: state,
+      };
+    });
   }, []);
 
   async function createAndScopeProject() {
@@ -59,7 +71,7 @@ export default function Dashboard({ initialBom }: DashboardProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          device_name: "SmartPatch X1",
+          device_name: deviceName,
           bom_text: bomText,
           target_regions: ["US", "EU", "CA"],
         }),
@@ -139,6 +151,19 @@ export default function Dashboard({ initialBom }: DashboardProps) {
           onSetupVerified={(verified, estimate) => {
             setSetupVerified(verified);
             if (estimate) setSetupEstimate(estimate);
+          }}
+          onDeviceIdentified={(device) => {
+            const chipsList = Array.isArray(device.chips)
+              ? device.chips.map((c: any) => `- ${c.chip || c.type || "Wireless Chip"} (${c.type}, ${c.freq_mhz} MHz, ${c.power_dbm} dBm)`).join("\n")
+              : "";
+            const formatted = `${device.device_name}
+- Form factor: ${device.form_factor || "unknown"}
+- Body worn: ${device.body_worn ? "true" : "false"}
+${chipsList}
+- Notes: ${device.notes || "None"}`;
+            setDeviceName(device.device_name);
+            setBomText(formatted);
+            setStatus(`Identified ${device.device_name}!`);
           }}
         />
         <div className="statusBoard">

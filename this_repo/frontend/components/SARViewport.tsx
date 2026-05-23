@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
+import { OrbitControls, Edges } from "@react-three/drei";
 import { DoubleSide } from "three";
 import { forwardRef, MutableRefObject, useEffect, useImperativeHandle, useRef, useState } from "react";
 import RobotArm, { RobotArmHandle } from "./RobotArm";
@@ -72,13 +73,7 @@ function SceneContent({
 }) {
   const armRef = useRef<RobotArmHandle>(null);
 
-  useFrame(({ camera, clock }) => {
-    const t = clock.elapsedTime * 0.08;
-    camera.position.x = Math.cos(t) * 28;
-    camera.position.z = Math.sin(t) * 28 + 4;
-    camera.position.y = 20;
-    camera.lookAt(0, 0, 2);
-
+  useFrame(() => {
     if (latestPoint) {
       armRef.current?.updateArm(latestPoint.x, latestPoint.y, latestPoint.z);
     }
@@ -90,13 +85,29 @@ function SceneContent({
       <directionalLight position={[10, 22, 18]} intensity={1.2} />
       <pointLight position={[-8, 10, 8]} intensity={0.8} color="#3bb7ff" />
 
+      <OrbitControls
+        enableDamping
+        dampingFactor={0.05}
+        autoRotate
+        autoRotateSpeed={0.5}
+        target={[0, 0, 2]}
+        makeDefault
+      />
+
       <mesh position={[0, 0, 2]}>
         <boxGeometry args={[15, 22, 8]} />
-        <meshPhongMaterial color="#2878ff" transparent opacity={0.07} side={DoubleSide} />
+        <meshPhongMaterial
+          color="#2255bb"
+          transparent
+          opacity={0.08}
+          side={DoubleSide}
+          depthWrite={false}
+        />
       </mesh>
       <mesh position={[0, 0, 2]}>
         <boxGeometry args={[15, 22, 8]} />
-        <meshBasicMaterial color="#3b82f6" wireframe transparent opacity={0.16} />
+        <meshBasicMaterial visible={false} />
+        <Edges color="#3b82f6" scale={1.001} />
       </mesh>
       <mesh>
         <boxGeometry args={[22, 27, 20]} />

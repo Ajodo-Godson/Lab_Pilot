@@ -84,28 +84,10 @@ function setupEstimateFrom(result: VisionResult): SetupEstimate {
 }
 
 function normalizeForDemo(result: VisionResult): VisionResult {
-  const issues = Array.isArray(result.issues) ? result.issues.slice(0, 1) : [];
-  const allText = `${result.message} ${issues.map((issue) => `${issue.description} ${issue.fix}`).join(" ")}`.toLowerCase();
-  const isAngleOnlyProblem =
-    allText.includes("perpendicular") || allText.includes("tilted") || allText.includes("angle") || allText.includes("90");
-  const hasBlockingIssue =
-    allText.includes("black") ||
-    allText.includes("dark") ||
-    allText.includes("unusable") ||
-    allText.includes("impossible to verify") ||
-    allText.includes("cannot verify") ||
-    allText.includes("lens") ||
-    allText.includes("lighting") ||
-    allText.includes("no phone") ||
-    allText.includes("phone not visible") ||
-    allText.includes("no pen") ||
-    allText.includes("no probe") ||
-    allText.includes("probe not visible") ||
-    allText.includes("pen not visible") ||
-    allText.includes("large metallic") ||
-    allText.includes("metallic object");
+  const issues = Array.isArray(result.issues) ? result.issues : [];
+  const isValid = result.valid === true;
 
-  if (hasBlockingIssue && !isAngleOnlyProblem) {
+  if (!isValid) {
     return {
       valid: false,
       issues,
@@ -115,8 +97,8 @@ function normalizeForDemo(result: VisionResult): VisionResult {
 
   return {
     valid: true,
-    issues: [],
-    message: "Setup accepted and locked for simulation.",
+    issues,
+    message: result.message || "Setup accepted and locked for simulation.",
     setup_estimate: setupEstimateFrom(result),
   };
 }

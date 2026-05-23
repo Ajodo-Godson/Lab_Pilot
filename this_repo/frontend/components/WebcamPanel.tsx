@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = {
   onSetupVerified: (verified: boolean, setupEstimate?: SetupEstimate) => void;
+  onDeviceIdentified?: (device: any) => void;
 };
 
 type VisionIssue = {
@@ -28,13 +29,14 @@ export type SetupEstimate = {
   notes: string;
 };
 
-export default function WebcamPanel({ onSetupVerified }: Props) {
+export default function WebcamPanel({ onSetupVerified, onDeviceIdentified }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [acceptedFrame, setAcceptedFrame] = useState("");
+  const [identifying, setIdentifying] = useState(false);
   const [result, setResult] = useState<VisionResult>({
     valid: false,
     issues: [],
@@ -123,6 +125,27 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
     };
   }, [acceptedFrame, onSetupVerified, selectedDeviceId]);
 
+  async function identifyDevice() {
+    if (!acceptedFrame) return;
+    setIdentifying(true);
+    try {
+      const base64Part = acceptedFrame.split(",")[1];
+      const res = await fetch("/api/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frame: base64Part }),
+      });
+      if (!res.ok) throw new Error("Identification failed");
+      const data = await res.json();
+      onDeviceIdentified?.(data);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to identify device. Make sure your API key and Internet are working.");
+    } finally {
+      setIdentifying(false);
+    }
+  }
+
   return (
     <div className="webcam">
       <select
@@ -155,6 +178,15 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
           <span>offset {result.setup_estimate.antenna_x.toFixed(1)}</span>
           <span>{result.setup_estimate.setup_quality}</span>
         </div>
+      )}
+      {result.valid && (
+        <button
+          disabled={identifying}
+          style={{ width: "100%", marginTop: "6px", background: "#042f3f", borderColor: "#164e63" }}
+          onClick={identifyDevice}
+        >
+          {identifying ? "Identifying..." : "🔍 Identify device"}
+        </button>
       )}
       {result.issues.map((issue, index) => (
         <div key={`${issue.description}-${index}`} className={`issueCard ${issue.severity}`}>

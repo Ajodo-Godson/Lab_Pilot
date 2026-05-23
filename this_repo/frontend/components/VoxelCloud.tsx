@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
-import { Color, InstancedMesh, Matrix4, Object3D } from "three";
+import { Color, InstancedMesh, InstancedBufferAttribute, Matrix4, Object3D } from "three";
 import { useFrame } from "@react-three/fiber";
 
 export type SARPoint = {
@@ -55,7 +55,12 @@ const VoxelCloud = forwardRef<VoxelCloudHandle, Props>(function VoxelCloud({ onP
   }
 
   useEffect(() => {
-    hideAll();
+    const mesh = meshRef.current;
+    if (mesh) {
+      const colors = new Float32Array(MAX_POINTS * 3);
+      mesh.instanceColor = new InstancedBufferAttribute(colors, 3);
+      hideAll();
+    }
   }, []);
 
   useImperativeHandle(ref, () => ({

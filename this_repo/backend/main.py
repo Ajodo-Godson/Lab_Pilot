@@ -116,13 +116,29 @@ async def event_stream(project_id: str) -> StreamingResponse:
 
 
 @app.get("/api/projects/{project_id}/report")
-async def get_report(project_id: str) -> JSONResponse:
+async def get_report(project_id: str, media: str | None = None) -> Any:
     project = _project_or_404(project_id)
     report = project.get("report")
     if not report:
         raise HTTPException(404, "Report not ready.")
-    return JSONResponse(
-        {"pdf_base64": report.get("pdf_base64", ""), "summary": report.get("summary", "")}
+
+    # Return JSON by default
+    if media != "pdf":
+        return JSONResponse(
+            {"pdf_base64": report.get("pdf_base64", ""), "summary": report.get("summary", "")}
+        )
+
+    import base64
+    from fastapi import Response
+
+    pdf_bytes = base64.b64decode(report.get("pdf_base64", ""))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"inline; filename=\"report-{project_id}.pdf\"",
+            "Cache-Control": "no-cache",
+        },
     )
 
 

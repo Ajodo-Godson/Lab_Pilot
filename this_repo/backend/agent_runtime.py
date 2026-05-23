@@ -45,11 +45,15 @@ def parse_json(text: str) -> Any:
     cleaned = _strip_fences(text)
     try:
         return json.loads(cleaned)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        print(f"[parse_json] ERROR: {exc}\n--- ORIGINAL TEXT ---\n{text}\n--- CLEANED TEXT ---\n{cleaned}\n-------------------")
         start = cleaned.find("{")
         end = cleaned.rfind("}")
         if start != -1 and end != -1 and end > start:
-            return json.loads(cleaned[start : end + 1])
+            try:
+                return json.loads(cleaned[start : end + 1])
+            except json.JSONDecodeError as exc2:
+                print(f"[parse_json] Fallback failed: {exc2}")
         raise
 
 

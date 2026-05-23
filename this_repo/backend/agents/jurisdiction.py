@@ -12,8 +12,30 @@ from models import DeviceProfile, JurisdictionResult
 
 REGIONS = ["fcc", "eu", "ca", "jp", "br"]
 
+_REGION_MAP = {
+    "fcc": {"US", "FCC"},
+    "eu": {"EU"},
+    "ca": {"CA", "ISED"},
+    "jp": {"JP", "JAPAN"},
+    "br": {"BR", "BRAZIL"},
+}
+
+def _is_region_targeted(region: str, target_regions: list[str]) -> bool:
+    allowed = _REGION_MAP.get(region, set())
+    targets = {t.upper() for t in target_regions}
+    return bool(allowed.intersection(targets))
+
 
 async def _run_one(region: str, profile: DeviceProfile) -> JurisdictionResult:
+    if not _is_region_targeted(region, profile.target_regions):
+        return JurisdictionResult(
+            region=region,
+            summary=f"Not requested: Region {region.upper()} is not in target regions.",
+            required_tests=[],
+            citations=[],
+            estimated_hours=0
+        )
+
     prompt = (
         "Analyze this DeviceProfile for your jurisdiction. Use the SKILL.md "
         "mounted in your environment as the authoritative reference. Use "

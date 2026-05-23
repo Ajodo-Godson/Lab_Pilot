@@ -41,9 +41,13 @@ export default function AgentFeed({
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
+  const isMock = projectId === "demo-project";
+  const backend = isMock
+    ? (process.env.NEXT_PUBLIC_MOCK_BACKEND_URL ?? "http://localhost:8003")
+    : (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000");
+
   useEffect(() => {
     if (!projectId) return;
-    const backend = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
     const source = new EventSource(`${backend}/api/projects/${projectId}/events`);
 
     eventNames.forEach((name) => {
@@ -59,7 +63,7 @@ export default function AgentFeed({
     });
 
     return () => source.close();
-  }, [projectId, onEvent]);
+  }, [projectId, onEvent, backend]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
@@ -76,7 +80,16 @@ export default function AgentFeed({
           </div>
           <p>{eventBody(event)}</p>
           {event.event === "report_ready" && typeof event.data.download_url === "string" && (
-            <a className="download" href={event.data.download_url}>
+            <a
+              className="download"
+              href={
+                (event.data.download_url.startsWith("http")
+                  ? event.data.download_url
+                  : `${backend}${event.data.download_url}`) + "?media=pdf"
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Download report
             </a>
           )}

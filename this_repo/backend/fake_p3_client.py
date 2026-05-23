@@ -34,7 +34,7 @@ SmartPatch X1 — Bill of Materials
 DEMO_REQUEST = {
     "device_name": "SmartPatch X1",
     "bom_text": DEMO_BOM,
-    "target_regions": ["US", "EU", "CA", "JP", "BR"],
+    "target_regions": ["US", "EU", "CA"],
 }
 
 # After a real P2 scan would run, P3 normally collects this from /scan_complete.
