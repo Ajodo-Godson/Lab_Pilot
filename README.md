@@ -10,16 +10,18 @@
 
 ## What it does
 
-Paste a BOM (bill of materials). LabPilot does the rest:
+Point a camera at any wireless device. LabPilot does the rest:
 
-1. **Detects** the device class (phone / tablet / wearable / laptop / IoT / speaker / gateway) automatically -- no dropdowns.
+1. **Identifies** the device from a single webcam frame -- make, model, form factor, radios -- using Gemini multimodal vision.
 2. **Analyzes** regulatory requirements across 5 jurisdictions (FCC, EU RED, ISED Canada, Japan MIC, ANATEL Brazil) in parallel.
 3. **Drafts** a complete test plan with citations.
-4. **Simulates** a volumetric SAR scan using a physics-based digital twin in real-time 3D.
+4. **Simulates** a volumetric SAR scan using a physics-based digital twin in real-time 3D, with grid and phantom geometry adapted to the detected device class.
 5. **Detects** anomalies live via a WebSocket SAR monitor agent.
 6. **Generates** a multi-page certification report (PDF, with charts and per-jurisdiction pass/fail).
 
-All in under 2 minutes.
+All in under 2 minutes. No dropdowns, no manual configuration -- the device classifies itself.
+
+> **Vision -> Text pipeline:** The webcam identification result is converted into a structured BOM (device name, chips, frequencies, power, form factor), which then feeds the 11-agent text pipeline. **One photo bootstraps the entire compliance workflow.**
 
 ## Why it's different
 
@@ -107,9 +109,9 @@ The 3D viewport, simulator grid geometry, anomaly position, radio frequency/powe
 
 ## Demo walkthrough
 
-1. **Create project** -- Paste a BOM, click "Create project + scope". Watch 11 agents stream events in real-time on the left panel. The intake agent's `device_profile` event tells the rest of the stack what kind of device it is.
-2. **Lock setup** -- Click "Lock current setup" (or point a webcam at any device + pen and let Gemini Vision verify the probe positioning).
-3. **Initialize scan** -- The 3D voxel cloud streams in, color-graded blue -> teal -> amber. The robot arm tracks the scan position. Around 70% through, the planted anomaly fires -- the SAR monitor agent emits a critical alert that gets injected into the agent feed.
+1. **Identify device** -- Point a webcam at any wireless device. Gemini Vision verifies setup and identifies the device (make, model, radios, form factor). The result is converted to a structured BOM and auto-populates the project text -- no typing required.
+2. **Create project + scope** -- Click the create button. The 11-agent text pipeline kicks off using the BOM that was generated from the photo. Watch agents stream events in real-time on the left panel. The intake agent's `device_profile` event tells the rest of the stack what kind of device it is.
+3. **Initialize scan** -- The 3D voxel cloud streams in, color-graded blue -> teal -> amber. The phantom mesh and grid bounds adapt to the detected device class. The robot arm tracks the scan position. Around 70% through, the planted anomaly fires -- the SAR monitor agent emits a critical alert that gets injected into the agent feed.
 4. **Generate report** -- The 5 report-section agents run in parallel. The Antigravity managed agent autonomously assembles the final PDF with matplotlib charts inside a sandboxed Linux environment. Download link appears in the feed.
 
 ## Honest framing
