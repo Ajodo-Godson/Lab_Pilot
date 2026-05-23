@@ -13,7 +13,12 @@ from fastapi.responses import StreamingResponse
 from sar_monitor_agent import handle_sar_monitor
 from sar_physics import stream_sar_grid
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+# Load .env from project root (Lab_Pilot/) or this_repo/
+_here = Path(__file__).resolve().parent
+for _candidate in [_here.parent / ".env", _here.parents[1] / ".env"]:
+    if _candidate.exists():
+        load_dotenv(_candidate)
+        break
 
 app = FastAPI(title="LabPilot Simulator")
 app.add_middleware(
