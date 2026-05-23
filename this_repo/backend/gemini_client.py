@@ -54,8 +54,9 @@ wireless device and emit a strict JSON DeviceProfile.
 
 DeviceProfile schema:
   device_name: string
-  form_factor: one of "wearable" | "handset" | "speaker" | "gateway" | "other"
-  body_worn: boolean (true if used within 20 cm of body)
+  form_factor: one of "handset" | "tablet" | "wearable" | "laptop" | "iot" | "speaker" | "gateway" | "other"
+  body_worn: boolean (true if typically used within 20 cm of body)
+  held_to_head: boolean (true for handsets used against the ear)
   radios: list of { chip: string, type: string, freq_mhz: number, power_dbm: number }
   target_regions: list of ISO country codes
   notes: short string with anything notable (DFS, UWB, NFC, etc.)

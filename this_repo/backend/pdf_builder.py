@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import io
+import re
 from datetime import date
 from typing import Any
 
@@ -99,6 +100,103 @@ def _anomaly_scatter(anomalies: list[dict]) -> bytes:
     return buf.read()
 
 
+def _format_inline(text: str) -> str:
+    # Escape XML/HTML special characters first so they don't break ReportLab's parser.
+    # Crucial order: replace & first, then < and >.
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    # Convert bold: **text** -> <b>text</b> or __text__ -> <b>text</b>
+    text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__(.*?)__", r"<b>\1</b>", text)
+    # Convert italic: *text* -> <i>text</i> or _text_ -> <i>text</i>
+    text = re.sub(r"\*(.*?)\*", r"<i>\1</i>", text)
+    text = re.sub(r"_(.*?)_", r"<i>\1</i>", text)
+    # Convert inline code: `text` -> <font name="Courier">\1</font>
+    text = re.sub(r"`(.*?)`", r'<font name="Courier">\1</font>', text)
+    return text
+
+
+def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[Any]:
+    if not text:
+        return []
+
+    h2_style = styles_dict["H2"]
+    h3_style = styles_dict["H3"]
+    body_style = styles_dict["Body"]
+    bullet_style = styles_dict["Bullet"]
+
+    # Standardize newlines
+    text = text.replace("\r\n", "\n")
+    lines = text.split("\n")
+
+    flowables = []
+    current_paragraph_lines = []
+
+    def flush_paragraph():
+        if current_paragraph_lines:
+            joined = " ".join(current_paragraph_lines)
+            formatted = _format_inline(joined)
+            flowables.append(Paragraph(formatted, body_style))
+            flowables.append(Spacer(1, 6))
+            current_paragraph_lines.clear()
+
+    for line in lines:
+        stripped = line.strip()
+
+        # 1. Empty line -> separator
+        if not stripped:
+            flush_paragraph()
+            continue
+
+        # 2. Heading
+        if stripped.startswith("#"):
+            flush_paragraph()
+            level = 0
+            while level < len(stripped) and stripped[level] == "#":
+                level += 1
+            header_text = stripped[level:].strip()
+            formatted = _format_inline(header_text)
+            # Map headers: # becomes H2, ## becomes H3 to keep hierarchy clean under H1
+            if level == 1:
+                flowables.append(Paragraph(formatted, h2_style))
+            else:
+                flowables.append(Paragraph(formatted, h3_style))
+            continue
+
+        # 3. List Item
+        if stripped.startswith("* ") or stripped.startswith("- ") or re.match(r"^\d+\.\s", stripped):
+            flush_paragraph()
+            if stripped.startswith("* ") or stripped.startswith("- "):
+                item_text = stripped[2:].strip()
+                formatted = f"&bull; {_format_inline(item_text)}"
+            else:
+                m = re.match(r"^(\d+)\.\s(.*)", stripped)
+                num = m.group(1)
+                item_text = m.group(2).strip()
+                formatted = f"{num}. {_format_inline(item_text)}"
+            flowables.append(Paragraph(formatted, bullet_style))
+            continue
+
+        # 4. Horizontal Rule
+        if stripped in ("---", "***", "___"):
+            flush_paragraph()
+            hr_table = Table([[""]], colWidths=[6.5 * inch])
+            hr_table.setStyle(TableStyle([
+                ("LINEABOVE", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            flowables.append(Spacer(1, 4))
+            flowables.append(hr_table)
+            flowables.append(Spacer(1, 4))
+            continue
+
+        # 5. Regular text line -> append to current paragraph
+        current_paragraph_lines.append(stripped)
+
+    flush_paragraph()
+    return flowables
+
+
 def _para(text: str, style) -> Paragraph:
     # Reportlab is picky about ampersands and angle brackets.
     safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -122,8 +220,23 @@ def build_pdf(
     )
     h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=15, spaceBefore=14, spaceAfter=6,
                          textColor=colors.HexColor("#0b1d4a"))
-    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=12, spaceBefore=10, spaceAfter=4)
-    body = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=10.5, leading=14)
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=12, spaceBefore=10, spaceAfter=4,
+                         textColor=colors.HexColor("#0b1d4a"))
+    h3 = ParagraphStyle("H3", parent=styles["Heading3"], fontSize=11, spaceBefore=8, spaceAfter=4,
+                         textColor=colors.HexColor("#333333"))
+    body = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=10.5, leading=14, spaceAfter=6)
+    bullet = ParagraphStyle(
+        "Bullet", parent=styles["Normal"], fontSize=10.5, leading=14,
+        leftIndent=15, firstLineIndent=-10, spaceAfter=4
+    )
+
+    styles_dict = {
+        "H1": h1,
+        "H2": h2,
+        "H3": h3,
+        "Body": body,
+        "Bullet": bullet,
+    }
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -164,7 +277,7 @@ def build_pdf(
 
     # Executive Summary.
     story.append(_para("Executive Summary", h1))
-    story.append(_para(sections.get("report_compliance", "—"), body))
+    story.extend(parse_markdown_to_flowables(sections.get("report_compliance", "—"), styles_dict))
     story.append(Spacer(1, 8))
 
     # Charts.
@@ -174,11 +287,11 @@ def build_pdf(
 
     # Test Setup.
     story.append(_para("1. Test Setup", h1))
-    story.append(_para(sections.get("report_setup", "—"), body))
+    story.extend(parse_markdown_to_flowables(sections.get("report_setup", "—"), styles_dict))
 
     # Measurement Results.
     story.append(_para("2. Measurement Results", h1))
-    story.append(_para(sections.get("report_measurement", "—"), body))
+    story.extend(parse_markdown_to_flowables(sections.get("report_measurement", "—"), styles_dict))
     story.append(Spacer(1, 8))
     chart2 = _anomaly_scatter(scan_summary.get("anomalies", []))
     story.append(Image(io.BytesIO(chart2), width=6.5 * inch, height=3.0 * inch))
@@ -186,11 +299,11 @@ def build_pdf(
 
     # Regulatory Traceability.
     story.append(_para("3. Regulatory Traceability", h1))
-    story.append(_para(sections.get("report_citer", "—"), body))
+    story.extend(parse_markdown_to_flowables(sections.get("report_citer", "—"), styles_dict))
 
     # Anomaly Analysis.
     story.append(_para("4. Anomaly Analysis", h1))
-    story.append(_para(sections.get("report_narrator", "—"), body))
+    story.extend(parse_markdown_to_flowables(sections.get("report_narrator", "—"), styles_dict))
     story.append(PageBreak())
 
     # Per-jurisdiction summaries.
@@ -201,6 +314,9 @@ def build_pdf(
         entry = cert_matrix.get(region_code, {})
         tests = entry.get("required_tests", []) if isinstance(entry, dict) else []
         hours = entry.get("estimated_hours", "—") if isinstance(entry, dict) else "—"
+        # Skip jurisdictions that weren't requested (empty test list means "not targeted").
+        if not tests:
+            continue
         rows.append([
             label,
             f"{limit} W/kg",
@@ -225,11 +341,11 @@ def build_pdf(
 
     # Test plan summary.
     story.append(_para("6. Test Plan", h1))
-    story.append(_para(test_plan.get("summary", "—"), body))
+    story.extend(parse_markdown_to_flowables(test_plan.get("summary", "—"), styles_dict))
     if test_plan.get("configurations"):
         story.append(_para("Configurations", h2))
         for cfg in test_plan["configurations"]:
-            story.append(_para(f"• {cfg}", body))
+            story.append(Paragraph(f"&bull; {_format_inline(cfg)}", bullet))
     if test_plan.get("citations"):
         story.append(_para("Citations", h2))
         story.append(_para(", ".join(test_plan["citations"]), body))

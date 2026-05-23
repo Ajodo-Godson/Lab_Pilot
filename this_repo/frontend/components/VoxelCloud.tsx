@@ -24,7 +24,7 @@ type Props = {
   onPointAdded?: (point: SARPoint) => void;
 };
 
-const MAX_POINTS = 2000;
+const MAX_POINTS = 10000;
 
 function colorForPct(pct: number) {
   if (pct < 0.4) return "#1044bb";

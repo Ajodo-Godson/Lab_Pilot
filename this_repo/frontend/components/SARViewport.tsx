@@ -24,8 +24,16 @@ export type SARViewportHandle = {
   getScanSummary: () => ScanSummary | null;
 };
 
+export type AnomalyAlert = {
+  level: "warning" | "critical";
+  text: string;
+  sar?: number;
+  position?: [number, number, number];
+};
+
 type Props = {
   onScanComplete: (summary: ScanSummary) => void;
+  onAnomalyAlert?: (alert: AnomalyAlert) => void;
 };
 
 export type SARSetupEstimate = {
@@ -125,7 +133,7 @@ function SceneContent({
   );
 }
 
-const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ onScanComplete }, ref) {
+const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ onScanComplete, onAnomalyAlert }, ref) {
   const [currentPoint, setCurrentPoint] = useState<SARPoint | null>(null);
   const [voxelCount, setVoxelCount] = useState(0);
   const [monitorAlert, setMonitorAlert] = useState<{ level: "warning" | "critical"; text: string } | null>(null);
@@ -186,10 +194,15 @@ const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ 
       monitor.onmessage = (event) => {
         const message = JSON.parse(event.data) as MonitorMessage;
         if (message.type === "warning") {
-          setMonitorAlert({ level: "warning", text: message.message });
+          const alert = { level: "warning" as const, text: message.message, sar: message.sar };
+          setMonitorAlert(alert);
+          onAnomalyAlert?.(alert);
         }
         if (message.type === "critical") {
-          setMonitorAlert({ level: "critical", text: `${message.message} ${message.recommendation}` });
+          const text = `${message.message} ${message.recommendation}`;
+          const alert: AnomalyAlert = { level: "critical", text };
+          setMonitorAlert(alert);
+          onAnomalyAlert?.(alert);
         }
       };
       monitor.onerror = () => setMonitorAlert({ level: "warning", text: "SAR monitor socket unavailable; scan stream still running." });

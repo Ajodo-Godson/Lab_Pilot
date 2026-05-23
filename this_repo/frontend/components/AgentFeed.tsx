@@ -34,9 +34,11 @@ function eventBody(event: FeedEvent) {
 export default function AgentFeed({
   projectId,
   onEvent,
+  injectedEvents,
 }: {
   projectId: string;
   onEvent?: (event: FeedEvent) => void;
+  injectedEvents?: FeedEvent[];
 }) {
   const [events, setEvents] = useState<FeedEvent[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
@@ -65,14 +67,20 @@ export default function AgentFeed({
     return () => source.close();
   }, [projectId, onEvent, backend]);
 
+  const allEvents = injectedEvents ? [...events, ...injectedEvents].sort((a, b) => {
+    const ta = parseInt(a.id.split("-")[1] || "0", 10);
+    const tb = parseInt(b.id.split("-")[1] || "0", 10);
+    return ta - tb;
+  }) : events;
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [events]);
+  }, [allEvents]);
 
   return (
     <div className="feed">
-      {events.length === 0 && <p className="muted">No agent events yet.</p>}
-      {events.map((event) => (
+      {allEvents.length === 0 && <p className="muted">No agent events yet.</p>}
+      {allEvents.map((event) => (
         <div key={event.id} className={`event ${event.event}`}>
           <div className="eventTop">
             <strong>{eventTitle(event)}</strong>

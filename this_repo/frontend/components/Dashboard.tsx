@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import AgentFeed, { FeedEvent } from "./AgentFeed";
-import SARViewport, { SARSetupEstimate, SARViewportHandle, ScanSummary } from "./SARViewport";
+import SARViewport, { AnomalyAlert, SARSetupEstimate, SARViewportHandle, ScanSummary } from "./SARViewport";
 import WebcamPanel, { SetupEstimate } from "./WebcamPanel";
 
 type DashboardProps = {
@@ -37,7 +37,9 @@ export default function Dashboard({ initialBom }: DashboardProps) {
   const [status, setStatus] = useState("Idle");
   const [setupEstimate, setSetupEstimate] = useState<SetupEstimate | null>(null);
   const [jurisdictions, setJurisdictions] = useState(initialJurisdictions);
+  const [injectedEvents, setInjectedEvents] = useState<FeedEvent[]>([]);
   const sarRef = useRef<SARViewportHandle>(null);
+  const anomalyIdRef = useRef(0);
 
   const handleAgentEvent = useCallback((event: FeedEvent) => {
     const agent = typeof event.data.agent === "string" ? event.data.agent : "";
@@ -60,6 +62,23 @@ export default function Dashboard({ initialBom }: DashboardProps) {
     });
   }, []);
 
+  const handleAnomalyAlert = useCallback((alert: AnomalyAlert) => {
+    if (alert.level !== "critical") return;
+    anomalyIdRef.current += 1;
+    const event: FeedEvent = {
+      id: `anomaly-${anomalyIdRef.current}-${Date.now()}`,
+      event: "anomaly_detected",
+      data: {
+        id: `a${anomalyIdRef.current}`,
+        severity: alert.level,
+        message: alert.text,
+        sar: alert.sar ?? 0,
+        limit: 1.6,
+      },
+    };
+    setInjectedEvents((prev) => [...prev, event]);
+  }, []);
+
   async function createAndScopeProject() {
     setStatus("Creating project...");
     setScanComplete(false);
@@ -73,7 +92,7 @@ export default function Dashboard({ initialBom }: DashboardProps) {
         body: JSON.stringify({
           device_name: deviceName,
           bom_text: bomText,
-          target_regions: ["US", "EU", "CA"],
+          target_regions: ["US", "EU", "CA", "JP", "BR"],
         }),
       });
       if (!createRes.ok) throw new Error("Project endpoint unavailable");
@@ -120,7 +139,7 @@ export default function Dashboard({ initialBom }: DashboardProps) {
         <p className="status">{status}</p>
         <div>
           <h2>Agent stream</h2>
-          <AgentFeed projectId={projectId} onEvent={handleAgentEvent} />
+          <AgentFeed projectId={projectId} onEvent={handleAgentEvent} injectedEvents={injectedEvents} />
         </div>
       </section>
 
@@ -142,6 +161,7 @@ export default function Dashboard({ initialBom }: DashboardProps) {
             setScanComplete(true);
             setStatus("Scan complete");
           }}
+          onAnomalyAlert={handleAnomalyAlert}
         />
       </section>
 

@@ -39,11 +39,15 @@ class Radio(BaseModel):
     power_dbm: float
 
 
+FORM_FACTORS = {"handset", "tablet", "wearable", "laptop", "iot", "speaker", "gateway", "other"}
+
+
 class DeviceProfile(BaseModel):
     """Structured output of the intake agent."""
     device_name: str
-    form_factor: str  # wearable | handset | speaker | gateway | other
+    form_factor: str  # handset | tablet | wearable | laptop | iot | speaker | gateway | other
     body_worn: bool
+    held_to_head: bool = False
     radios: list[Radio]
     target_regions: list[str]
     notes: str = ""

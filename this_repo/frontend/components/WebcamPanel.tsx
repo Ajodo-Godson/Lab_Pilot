@@ -46,6 +46,8 @@ export default function WebcamPanel({ onSetupVerified, onDeviceIdentified }: Pro
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     let inFlight = false;
+    let attemptCount = 0;
+    const MAX_ATTEMPTS = 8;
 
     function stopCamera() {
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -55,10 +57,16 @@ export default function WebcamPanel({ onSetupVerified, onDeviceIdentified }: Pro
 
     async function captureFrame() {
       if (acceptedFrame || inFlight || !videoRef.current || !canvasRef.current) return;
+      if (attemptCount >= MAX_ATTEMPTS) {
+        if (interval) clearInterval(interval);
+        setResult({ valid: false, issues: [], message: "Auto-check limit reached — use override to proceed." });
+        return;
+      }
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
       if (!ctx || videoRef.current.readyState < 2) return;
 
+      attemptCount += 1;
       inFlight = true;
       canvas.width = 320;
       canvas.height = 240;
@@ -108,7 +116,7 @@ export default function WebcamPanel({ onSetupVerified, onDeviceIdentified }: Pro
         if (videoRef.current) videoRef.current.srcObject = streamRef.current;
         await refreshDevices();
         setResult({ valid: false, issues: [], message: "Analyzing..." });
-        interval = setInterval(captureFrame, 1500);
+        interval = setInterval(captureFrame, 3000);
       } catch {
         setResult({
           valid: false,
