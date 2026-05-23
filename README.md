@@ -68,6 +68,8 @@ flowchart LR
         AgentFeed
         SARViewport[SARViewport - Three.js]
         WebcamPanel
+        VerifyAPI[/api/verify/]
+        IdentifyAPI[/api/identify/]
     end
     subgraph be [Backend - FastAPI :8000]
         Orchestrator
@@ -81,13 +83,25 @@ flowchart LR
         Physics[sar_physics]
         Monitor[SAR Monitor agent]
     end
-    Dashboard -->|POST| Orchestrator
+    Gemini[Google Gemini]
+
+    WebcamPanel -->|frame| VerifyAPI
+    WebcamPanel -->|frame| IdentifyAPI
+    VerifyAPI -->|Vision| Gemini
+    IdentifyAPI -->|Vision| Gemini
+    IdentifyAPI -.->|BOM autofill| Dashboard
+
+    Dashboard -->|POST /scope| Orchestrator
+    Dashboard -->|POST /report/generate| Orchestrator
     Orchestrator -->|SSE events| AgentFeed
-    SARViewport -->|POST start| Physics
+    Orchestrator -.->|device_profile event| SARViewport
+
+    SARViewport -->|POST /simulator/start| Physics
     Physics -->|SSE voxel stream| SARViewport
     SARViewport <-->|WebSocket| Monitor
-    Monitor -->|Gemini Live API| Gemini[Google Gemini]
+
     Intake & Juris & TestPlan & Report --> Gemini
+    Monitor -->|Flash| Gemini
     Assembler -->|managed agent| Gemini
 ```
 
