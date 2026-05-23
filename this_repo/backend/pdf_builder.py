@@ -69,7 +69,18 @@ def _peak_vs_limit_chart(peak_sar: float) -> bytes:
     return buf.read()
 
 
-def _anomaly_scatter(anomalies: list[dict]) -> bytes:
+PHANTOM_LABELS = {
+    "handset": "handset phantom surface",
+    "tablet": "tablet phantom surface",
+    "wearable": "body-worn wrist phantom",
+    "laptop": "laptop phantom surface",
+    "iot": "IoT device phantom surface",
+    "speaker": "desktop exposure surface",
+    "gateway": "desktop exposure surface",
+}
+
+
+def _anomaly_scatter(anomalies: list[dict], form_factor: str = "handset") -> bytes:
     """X-Y scatter colored by SAR for anomaly cluster."""
     fig, ax = plt.subplots(figsize=(7, 3.4), dpi=150)
     if anomalies:
@@ -90,7 +101,8 @@ def _anomaly_scatter(anomalies: list[dict]) -> bytes:
         ax.text(0.5, 0.5, "No anomalies above threshold", ha="center", va="center")
     ax.set_xlabel("X (cm)")
     ax.set_ylabel("Y (cm)")
-    ax.set_title("Anomaly cluster — body-worn surface")
+    label = PHANTOM_LABELS.get(form_factor, "test surface")
+    ax.set_title(f"Anomaly cluster — {label}")
     ax.grid(linestyle=":", alpha=0.5)
     fig.tight_layout()
     buf = io.BytesIO()
@@ -293,7 +305,7 @@ def build_pdf(
     story.append(_para("2. Measurement Results", h1))
     story.extend(parse_markdown_to_flowables(sections.get("report_measurement", "—"), styles_dict))
     story.append(Spacer(1, 8))
-    chart2 = _anomaly_scatter(scan_summary.get("anomalies", []))
+    chart2 = _anomaly_scatter(scan_summary.get("anomalies", []), profile.get("form_factor", "handset"))
     story.append(Image(io.BytesIO(chart2), width=6.5 * inch, height=3.0 * inch))
     story.append(PageBreak())
 
