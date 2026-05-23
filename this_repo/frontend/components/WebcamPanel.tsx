@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Props = {
-  onSetupVerified: (verified: boolean) => void;
+  onSetupVerified: (verified: boolean, setupEstimate?: SetupEstimate) => void;
 };
 
 type VisionIssue = {
@@ -16,11 +16,25 @@ type VisionResult = {
   valid: boolean;
   issues: VisionIssue[];
   message: string;
+  setup_estimate?: SetupEstimate;
+};
+
+export type SetupEstimate = {
+  probe_distance_cm: number;
+  probe_angle_deg: number;
+  antenna_x: number;
+  antenna_y: number;
+  setup_quality: "good" | "acceptable" | "poor";
+  notes: string;
 };
 
 export default function WebcamPanel({ onSetupVerified }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [acceptedFrame, setAcceptedFrame] = useState("");
   const [result, setResult] = useState<VisionResult>({
     valid: false,
     issues: [],
@@ -28,12 +42,17 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
   });
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
     let inFlight = false;
 
+    function stopCamera() {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+    }
+
     async function captureFrame() {
-      if (inFlight || !videoRef.current || !canvasRef.current) return;
+      if (acceptedFrame || inFlight || !videoRef.current || !canvasRef.current) return;
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d");
       if (!ctx || videoRef.current.readyState < 2) return;
@@ -52,7 +71,12 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
         });
         const nextResult = (await response.json()) as VisionResult;
         setResult(nextResult);
-        if (nextResult.valid) onSetupVerified(true);
+        if (nextResult.valid) {
+          setAcceptedFrame(`data:image/jpeg;base64,${frame}`);
+          onSetupVerified(true, nextResult.setup_estimate);
+          if (interval) clearInterval(interval);
+          stopCamera();
+        }
       } catch {
         setResult({
           valid: false,
@@ -64,10 +88,23 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
       }
     }
 
+    async function refreshDevices() {
+      const nextDevices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "videoinput");
+      setDevices(nextDevices);
+      if (!selectedDeviceId && nextDevices[0]?.deviceId) {
+        setSelectedDeviceId(nextDevices[0].deviceId);
+      }
+    }
+
     async function start() {
+      if (acceptedFrame) return;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        stopCamera();
+        streamRef.current = await navigator.mediaDevices.getUserMedia({
+          video: selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : true,
+        });
+        if (videoRef.current) videoRef.current.srcObject = streamRef.current;
+        await refreshDevices();
         setResult({ valid: false, issues: [], message: "Analyzing..." });
         interval = setInterval(captureFrame, 1500);
       } catch {
@@ -82,18 +119,43 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
     start();
     return () => {
       if (interval) clearInterval(interval);
-      stream?.getTracks().forEach((track) => track.stop());
+      stopCamera();
     };
-  }, [onSetupVerified]);
+  }, [acceptedFrame, onSetupVerified, selectedDeviceId]);
 
   return (
     <div className="webcam">
-      <video ref={videoRef} autoPlay muted playsInline />
+      <select
+        className="cameraSelect"
+        value={selectedDeviceId}
+        onChange={(event) => setSelectedDeviceId(event.target.value)}
+        aria-label="Camera source"
+      >
+        {devices.length === 0 && <option value="">Default camera</option>}
+        {devices.map((device, index) => (
+          <option key={device.deviceId} value={device.deviceId}>
+            {device.label || `Camera ${index + 1}`}
+          </option>
+        ))}
+      </select>
+      {acceptedFrame ? (
+        <img className="acceptedFrame" src={acceptedFrame} alt="Accepted setup snapshot" />
+      ) : (
+        <video ref={videoRef} autoPlay muted playsInline />
+      )}
       <canvas ref={canvasRef} hidden />
       <div className={`visionBadge ${result.valid ? "valid" : result.issues.length ? "issue" : ""}`}>
-        {result.valid ? "Setup valid" : result.issues.length ? "Issues found" : "Analyzing..."}
+        {result.valid ? "Setup accepted" : result.issues.length ? "Issues found" : "Analyzing..."}
       </div>
       <p>{result.message}</p>
+      {result.valid && result.setup_estimate && (
+        <div className="setupEstimate">
+          <span>distance {result.setup_estimate.probe_distance_cm.toFixed(1)} cm</span>
+          <span>angle {Math.round(result.setup_estimate.probe_angle_deg)} deg</span>
+          <span>offset {result.setup_estimate.antenna_x.toFixed(1)}</span>
+          <span>{result.setup_estimate.setup_quality}</span>
+        </div>
+      )}
       {result.issues.map((issue, index) => (
         <div key={`${issue.description}-${index}`} className={`issueCard ${issue.severity}`}>
           <strong>{issue.description}</strong>
@@ -103,11 +165,35 @@ export default function WebcamPanel({ onSetupVerified }: Props) {
       <button
         className="override"
         onClick={() => {
-          setResult({ valid: true, issues: [], message: "Manual demo override engaged." });
-          onSetupVerified(true);
+          if (!videoRef.current || !canvasRef.current || videoRef.current.readyState < 2) {
+            setResult({
+              valid: false,
+              issues: [{ description: "No live setup frame available", severity: "error", fix: "Select a camera and show the phone/probe setup first." }],
+              message: "Cannot lock setup without a camera frame.",
+            });
+            return;
+          }
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          canvas.width = 320;
+          canvas.height = 240;
+          ctx.drawImage(videoRef.current, 0, 0, 320, 240);
+          const setupEstimate: SetupEstimate = {
+            probe_distance_cm: 3,
+            probe_angle_deg: 90,
+            antenna_x: 0,
+            antenna_y: 1.5,
+            setup_quality: "acceptable",
+            notes: "Manual lock from current visible setup frame.",
+          };
+          setAcceptedFrame(canvas.toDataURL("image/jpeg", 0.72));
+          setResult({ valid: true, issues: [], message: "Current setup frame locked for simulation.", setup_estimate: setupEstimate });
+          onSetupVerified(true, setupEstimate);
+          streamRef.current?.getTracks().forEach((track) => track.stop());
         }}
       >
-        Skip verification (demo override)
+        Lock current setup (demo override)
       </button>
     </div>
   );

@@ -2,8 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import AgentFeed, { FeedEvent } from "./AgentFeed";
-import SARViewport, { SARViewportHandle, ScanSummary } from "./SARViewport";
-import WebcamPanel from "./WebcamPanel";
+import SARViewport, { SARSetupEstimate, SARViewportHandle, ScanSummary } from "./SARViewport";
+import WebcamPanel, { SetupEstimate } from "./WebcamPanel";
 
 type DashboardProps = {
   initialBom: string;
@@ -34,6 +34,7 @@ export default function Dashboard({ initialBom }: DashboardProps) {
   const [setupVerified, setSetupVerified] = useState(false);
   const [scanComplete, setScanComplete] = useState(false);
   const [status, setStatus] = useState("Idle");
+  const [setupEstimate, setSetupEstimate] = useState<SetupEstimate | null>(null);
   const [jurisdictions, setJurisdictions] = useState(initialJurisdictions);
   const sarRef = useRef<SARViewportHandle>(null);
 
@@ -78,7 +79,7 @@ export default function Dashboard({ initialBom }: DashboardProps) {
   async function startScan() {
     setStatus("Starting synthetic SAR scan...");
     setScanComplete(false);
-    await sarRef.current?.startScan();
+    await sarRef.current?.startScan(setupEstimate as SARSetupEstimate | null);
   }
 
   async function generateReport() {
@@ -134,7 +135,12 @@ export default function Dashboard({ initialBom }: DashboardProps) {
 
       <section className="panel right">
         <h2>Setup verification</h2>
-        <WebcamPanel onSetupVerified={setSetupVerified} />
+        <WebcamPanel
+          onSetupVerified={(verified, estimate) => {
+            setSetupVerified(verified);
+            if (estimate) setSetupEstimate(estimate);
+          }}
+        />
         <div className="statusBoard">
           {(Object.keys(jurisdictions) as Jurisdiction[]).map((region) => (
             <div key={region}>

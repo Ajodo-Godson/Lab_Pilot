@@ -19,12 +19,21 @@ type MonitorMessage =
   | { type: "critical"; message: string; recommendation: string };
 
 export type SARViewportHandle = {
-  startScan: () => Promise<void>;
+  startScan: (setupEstimate?: SARSetupEstimate | null) => Promise<void>;
   getScanSummary: () => ScanSummary | null;
 };
 
 type Props = {
   onScanComplete: (summary: ScanSummary) => void;
+};
+
+export type SARSetupEstimate = {
+  probe_distance_cm: number;
+  probe_angle_deg: number;
+  antenna_x: number;
+  antenna_y: number;
+  setup_quality: "good" | "acceptable" | "poor";
+  notes: string;
 };
 
 function wsUrlFromHttp(url: string) {
@@ -33,6 +42,23 @@ function wsUrlFromHttp(url: string) {
 
 function emptySummary(): ScanSummary {
   return { peak_sar: 0, anomaly_count: 0, total_points: 0, anomalies: [] };
+}
+
+function scanParamsFromSetup(setupEstimate?: SARSetupEstimate | null) {
+  if (!setupEstimate) {
+    return { antenna_x: 0, antenna_y: 1.5, frequency_mhz: 2412, power_dbm: 20 };
+  }
+
+  const anglePenalty = Math.min(3, Math.abs(90 - setupEstimate.probe_angle_deg) / 15);
+  const distanceBoost = Math.max(0, 3 - setupEstimate.probe_distance_cm) * 0.45;
+  const qualityPenalty = setupEstimate.setup_quality === "poor" ? 1.5 : setupEstimate.setup_quality === "acceptable" ? 0.5 : 0;
+
+  return {
+    antenna_x: setupEstimate.antenna_x,
+    antenna_y: setupEstimate.antenna_y,
+    frequency_mhz: 2412,
+    power_dbm: Number((20 + anglePenalty + distanceBoost + qualityPenalty).toFixed(2)),
+  };
 }
 
 function SceneContent({
@@ -124,7 +150,7 @@ const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ 
     pendingMonitorPoints.current.push(point);
   }
 
-  async function startScan() {
+  async function startScan(setupEstimate?: SARSetupEstimate | null) {
     const simulator = process.env.NEXT_PUBLIC_SIMULATOR_URL ?? "http://localhost:8002";
     closeConnections();
     setCurrentPoint(null);
@@ -135,10 +161,11 @@ const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ 
     voxelRef.current?.reset();
 
     try {
+      const scanParams = scanParamsFromSetup(setupEstimate);
       await fetch(`${simulator}/api/simulator/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ antenna_x: 0, antenna_y: 1.5, frequency_mhz: 2412, power_dbm: 20 }),
+        body: JSON.stringify(scanParams),
       });
 
       const monitor = new WebSocket(`${wsUrlFromHttp(simulator)}/sar-monitor`);
