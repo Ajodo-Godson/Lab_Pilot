@@ -208,7 +208,7 @@ export default function WebcamPanel({ onSetupVerified, onDeviceIdentified }: Pro
           if (!videoRef.current || !canvasRef.current || videoRef.current.readyState < 2) {
             setResult({
               valid: false,
-              issues: [{ description: "No live setup frame available", severity: "error", fix: "Select a camera and show the phone/probe setup first." }],
+              issues: [{ description: "No live setup frame available", severity: "error", fix: "Select a camera and show the device/probe setup first." }],
               message: "Cannot lock setup without a camera frame.",
             });
             return;
