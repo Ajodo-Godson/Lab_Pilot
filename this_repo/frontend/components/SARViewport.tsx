@@ -31,9 +31,18 @@ export type AnomalyAlert = {
   position?: [number, number, number];
 };
 
+type DeviceRadio = {
+  chip: string;
+  type: string;
+  freq_mhz: number;
+  power_dbm: number;
+};
+
 type Props = {
   onScanComplete: (summary: ScanSummary) => void;
   onAnomalyAlert?: (alert: AnomalyAlert) => void;
+  formFactor?: string;
+  radios?: DeviceRadio[];
 };
 
 export type SARSetupEstimate = {
@@ -53,9 +62,42 @@ function emptySummary(): ScanSummary {
   return { peak_sar: 0, anomaly_count: 0, total_points: 0, anomalies: [] };
 }
 
-function scanParamsFromSetup(setupEstimate?: SARSetupEstimate | null) {
+type DeviceMeshConfig = {
+  phantom: [number, number, number];
+  device: [number, number, number];
+  deviceOffset: [number, number, number];
+  outerBox: [number, number, number];
+};
+
+const DEVICE_MESHES: Record<string, DeviceMeshConfig> = {
+  handset:  { phantom: [15, 22, 8],  device: [5.2, 8, 0.35],   deviceOffset: [0, -7.5, 6.45], outerBox: [22, 27, 20] },
+  tablet:   { phantom: [22, 30, 7],  device: [14, 20, 0.5],    deviceOffset: [0, -6, 6.8],    outerBox: [28, 36, 18] },
+  wearable: { phantom: [10, 10, 6],  device: [3.2, 3.2, 0.6],  deviceOffset: [0, -3, 5.5],    outerBox: [14, 14, 14] },
+  laptop:   { phantom: [30, 22, 7],  device: [20, 14, 0.6],    deviceOffset: [0, -5, 6.8],    outerBox: [36, 28, 18] },
+  iot:      { phantom: [12, 12, 7],  device: [5, 5, 0.8],      deviceOffset: [0, -4, 6.2],    outerBox: [18, 18, 16] },
+  speaker:  { phantom: [14, 14, 8],  device: [7, 7, 7],        deviceOffset: [0, -4.5, 7.5],  outerBox: [20, 20, 18] },
+  gateway:  { phantom: [14, 14, 8],  device: [8, 5, 1.5],      deviceOffset: [0, -5, 6.8],    outerBox: [20, 20, 18] },
+  other:    { phantom: [15, 22, 8],  device: [5.2, 8, 0.35],   deviceOffset: [0, -7.5, 6.45], outerBox: [22, 27, 20] },
+};
+
+function getDeviceMesh(formFactor: string | undefined): DeviceMeshConfig {
+  return DEVICE_MESHES[formFactor ?? "handset"] ?? DEVICE_MESHES.handset;
+}
+
+function getPrimaryRadio(radios?: DeviceRadio[]): { freq_mhz: number; power_dbm: number } {
+  if (!radios || radios.length === 0) return { freq_mhz: 2412, power_dbm: 20 };
+  const primary = radios.reduce((best, r) => (r.power_dbm > best.power_dbm ? r : best), radios[0]);
+  return { freq_mhz: primary.freq_mhz, power_dbm: primary.power_dbm };
+}
+
+function scanParamsFromSetup(
+  setupEstimate?: SARSetupEstimate | null,
+  formFactor?: string,
+  radios?: DeviceRadio[],
+) {
+  const radio = getPrimaryRadio(radios);
   if (!setupEstimate) {
-    return { antenna_x: 0, antenna_y: 1.5, frequency_mhz: 2412, power_dbm: 20 };
+    return { antenna_x: 0, antenna_y: 1.5, frequency_mhz: radio.freq_mhz, power_dbm: radio.power_dbm, form_factor: formFactor ?? "handset" };
   }
 
   const anglePenalty = Math.min(3, Math.abs(90 - setupEstimate.probe_angle_deg) / 15);
@@ -65,8 +107,9 @@ function scanParamsFromSetup(setupEstimate?: SARSetupEstimate | null) {
   return {
     antenna_x: setupEstimate.antenna_x,
     antenna_y: setupEstimate.antenna_y,
-    frequency_mhz: 2412,
-    power_dbm: Number((20 + anglePenalty + distanceBoost + qualityPenalty).toFixed(2)),
+    frequency_mhz: radio.freq_mhz,
+    power_dbm: Number((radio.power_dbm + anglePenalty + distanceBoost + qualityPenalty).toFixed(2)),
+    form_factor: formFactor ?? "handset",
   };
 }
 
@@ -74,12 +117,15 @@ function SceneContent({
   latestPoint,
   anomalyActive,
   voxelRef,
+  formFactor,
 }: {
   latestPoint: SARPoint | null;
   anomalyActive: boolean;
   voxelRef: MutableRefObject<VoxelCloudHandle | null>;
+  formFactor?: string;
 }) {
   const armRef = useRef<RobotArmHandle>(null);
+  const mesh = getDeviceMesh(formFactor);
 
   useFrame(() => {
     if (latestPoint) {
@@ -102,8 +148,9 @@ function SceneContent({
         makeDefault
       />
 
+      {/* Phantom volume */}
       <mesh position={[0, 0, 2]}>
-        <boxGeometry args={[15, 22, 8]} />
+        <boxGeometry args={mesh.phantom} />
         <meshPhongMaterial
           color="#2255bb"
           transparent
@@ -113,16 +160,18 @@ function SceneContent({
         />
       </mesh>
       <mesh position={[0, 0, 2]}>
-        <boxGeometry args={[15, 22, 8]} />
+        <boxGeometry args={mesh.phantom} />
         <meshBasicMaterial visible={false} />
         <Edges color="#3b82f6" scale={1.001} />
       </mesh>
+      {/* Outer scan volume */}
       <mesh>
-        <boxGeometry args={[22, 27, 20]} />
+        <boxGeometry args={mesh.outerBox} />
         <meshBasicMaterial color="#8ba4c7" wireframe transparent opacity={0.28} />
       </mesh>
-      <mesh position={[0, -7.5, 6.45]}>
-        <boxGeometry args={[5.2, 8, 0.35]} />
+      {/* Device slab */}
+      <mesh position={mesh.deviceOffset}>
+        <boxGeometry args={mesh.device} />
         <meshPhongMaterial color="#121826" emissive="#020617" />
       </mesh>
       <gridHelper args={[28, 28, "#27364d", "#172033"]} position={[0, -11, 0]} />
@@ -133,7 +182,7 @@ function SceneContent({
   );
 }
 
-const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ onScanComplete, onAnomalyAlert }, ref) {
+const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ onScanComplete, onAnomalyAlert, formFactor, radios }, ref) {
   const [currentPoint, setCurrentPoint] = useState<SARPoint | null>(null);
   const [voxelCount, setVoxelCount] = useState(0);
   const [monitorAlert, setMonitorAlert] = useState<{ level: "warning" | "critical"; text: string } | null>(null);
@@ -180,7 +229,7 @@ const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ 
     voxelRef.current?.reset();
 
     try {
-      const scanParams = scanParamsFromSetup(setupEstimate);
+      const scanParams = scanParamsFromSetup(setupEstimate, formFactor, radios);
       await fetch(`${simulator}/api/simulator/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +302,7 @@ const SARViewport = forwardRef<SARViewportHandle, Props>(function SARViewport({ 
     <div className="sarBox">
       <div className="sceneFrame">
         <Canvas camera={{ position: [24, 20, 30], fov: 45 }} gl={{ antialias: true }}>
-          <SceneContent latestPoint={currentPoint} anomalyActive={Boolean(currentPoint?.is_anomaly)} voxelRef={voxelRef} />
+          <SceneContent latestPoint={currentPoint} anomalyActive={Boolean(currentPoint?.is_anomaly)} voxelRef={voxelRef} formFactor={formFactor} />
         </Canvas>
       </div>
       <div className="stats">
