@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 export type FeedEvent = {
   id: string;
-  event: "agent_start" | "agent_complete" | "phase_complete" | "anomaly_detected" | "report_ready";
+  event: "agent_start" | "agent_complete" | "phase_complete" | "anomaly_detected" | "report_ready" | "device_profile";
   data: Record<string, unknown>;
 };
 
@@ -14,9 +14,11 @@ const eventNames: FeedEvent["event"][] = [
   "phase_complete",
   "anomaly_detected",
   "report_ready",
+  "device_profile",
 ];
 
 function eventTitle(event: FeedEvent) {
+  if (event.event === "device_profile") return "device detected";
   const agent = typeof event.data.agent === "string" ? event.data.agent : "";
   const phase = typeof event.data.phase === "string" ? event.data.phase : "";
   if (agent) return agent.replaceAll("_", " ");
@@ -26,6 +28,12 @@ function eventTitle(event: FeedEvent) {
 
 function eventBody(event: FeedEvent) {
   const data = event.data;
+  if (event.event === "device_profile") {
+    const name = typeof data.device_name === "string" ? data.device_name : "Unknown";
+    const ff = typeof data.form_factor === "string" ? data.form_factor : "unknown";
+    const radioCount = Array.isArray(data.radios) ? data.radios.length : 0;
+    return `${name} (${ff}) — ${radioCount} radio${radioCount !== 1 ? "s" : ""} detected`;
+  }
   const value = data.message ?? data.output ?? data.summary ?? data.recommendation ?? data.download_url;
   if (typeof value === "string") return value.length > 120 ? `${value.slice(0, 120)}...` : value;
   return JSON.stringify(data);
