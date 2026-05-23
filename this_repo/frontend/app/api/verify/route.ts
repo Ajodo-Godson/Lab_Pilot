@@ -24,18 +24,18 @@ export type SetupEstimate = {
 
 const verificationPrompt = `You are verifying an RF probe positioning setup for a live hackathon demo.
 Objects in frame:
-- Phone = the device under test (DUT)
-- Pen = the RF probe
+- DUT (device under test) = any wireless device (phone, tablet, wearable, laptop, IoT board, speaker, etc.)
+- Pen or probe = the RF measurement probe
 
-Pass the setup when the phone and pen/probe are both visible and the probe is near the phone.
+Pass the setup when the DUT and pen/probe are both visible and the probe is near the DUT.
 Be demo-tolerant: a tilted probe, imperfect perpendicular angle, hand in frame, or approximate distance should be a warning, not a failure.
-Only return valid=false when no phone is visible, no probe/pen is visible, the frame is unusable, or a large metallic object is directly touching the phone.
+Only return valid=false when no DUT is visible, no probe/pen is visible, the frame is unusable, or a large metallic object is directly touching the DUT.
 Return at most one issue. Prefer concise coaching.
 When valid=true, estimate setup parameters for the synthetic SAR simulator:
-- probe_distance_cm: approximate pen/probe tip distance from phone surface
-- probe_angle_deg: approximate probe angle relative to phone face where 90 is perpendicular
-- antenna_x: estimated left/right probe offset on the phone, from -4 to 4
-- antenna_y: simulator antenna distance scalar, from 0.5 to 4.0. Smaller means closer to phone.
+- probe_distance_cm: approximate pen/probe tip distance from DUT surface
+- probe_angle_deg: approximate probe angle relative to DUT surface where 90 is perpendicular
+- antenna_x: estimated left/right probe offset on the DUT, from -4 to 4
+- antenna_y: simulator antenna distance scalar, from 0.5 to 4.0. Smaller means closer to DUT.
 - setup_quality: good, acceptable, or poor
 
 Respond ONLY in this JSON, no markdown or code blocks:
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({
       valid: false,
-      issues: [{ description: "Vision response was unavailable", severity: "error", fix: "Retry with a clear phone and probe frame." }],
+      issues: [{ description: "Vision response was unavailable", severity: "error", fix: "Retry with a clear DUT and probe frame." }],
       message: "Cannot estimate setup from this frame.",
     });
   }
