@@ -113,8 +113,15 @@ def _anomaly_scatter(anomalies: list[dict], form_factor: str = "handset") -> byt
 
 
 def _format_inline(text: str) -> str:
+    # Safety net: strip HTML <br> tags (agents like to use them inside table cells)
+    # before we escape the angle brackets.  Replace with " / " so concatenated
+    # citation lists stay readable on one line.
+    text = re.sub(r"<\s*br\s*/?\s*>", " / ", text, flags=re.IGNORECASE)
+    # Strip LaTeX math markers ($...$ and $$...$$). The agents sometimes wrap
+    # coordinates and variables in LaTeX which ReportLab cannot render.
+    text = re.sub(r"\$\$([^$]+)\$\$", r"\1", text)
+    text = re.sub(r"\$([^$]+)\$", r"\1", text)
     # Escape XML/HTML special characters first so they don't break ReportLab's parser.
-    # Crucial order: replace & first, then < and >.
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     # Convert bold: **text** -> <b>text</b> or __text__ -> <b>text</b>
     text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", text)
@@ -125,6 +132,50 @@ def _format_inline(text: str) -> str:
     # Convert inline code: `text` -> <font name="Courier">\1</font>
     text = re.sub(r"`(.*?)`", r'<font name="Courier">\1</font>', text)
     return text
+
+
+def _split_md_table_row(row: str) -> list[str]:
+    """Split a markdown table row '| a | b | c |' into ['a', 'b', 'c']."""
+    parts = row.strip().strip("|").split("|")
+    return [p.strip() for p in parts]
+
+
+def _is_md_table_separator(row: str) -> bool:
+    """Detect markdown table separator rows like '| :--- | --- | ---: |'."""
+    cells = _split_md_table_row(row)
+    if not cells:
+        return False
+    return all(re.fullmatch(r":?-{3,}:?", c) for c in cells if c)
+
+
+def _build_md_table(rows: list[str], body_style) -> Any:
+    """Build a ReportLab Table from a sequence of markdown table row strings."""
+    parsed_rows = [_split_md_table_row(r) for r in rows if not _is_md_table_separator(r)]
+    if not parsed_rows:
+        return None
+    col_count = max(len(r) for r in parsed_rows)
+    normalized = [r + [""] * (col_count - len(r)) for r in parsed_rows]
+    cell_style = ParagraphStyle("TableCell", parent=body_style, fontSize=8.5, leading=10, spaceAfter=0)
+    table_data = [
+        [Paragraph(_format_inline(cell), cell_style) for cell in row]
+        for row in normalized
+    ]
+    usable_width = 6.6 * inch
+    col_widths = [usable_width / col_count] * col_count
+    t = Table(table_data, colWidths=col_widths, repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0b1d4a")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("BOX", (0, 0), (-1, -1), 0.4, colors.grey),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    return t
 
 
 def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[Any]:
@@ -138,10 +189,14 @@ def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[
 
     # Standardize newlines
     text = text.replace("\r\n", "\n")
+    # If the model produced table rows but jammed them onto a single line,
+    # insert newlines before each '|' that starts a new row.
+    text = re.sub(r"(?<!\n)\s*\|\s*(?=[^\|\n]{1,200}\s*\|)", "\n| ", text)
     lines = text.split("\n")
 
-    flowables = []
-    current_paragraph_lines = []
+    flowables: list[Any] = []
+    current_paragraph_lines: list[str] = []
+    pending_table_rows: list[str] = []
 
     def flush_paragraph():
         if current_paragraph_lines:
@@ -151,15 +206,30 @@ def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[
             flowables.append(Spacer(1, 6))
             current_paragraph_lines.clear()
 
+    def flush_table():
+        if pending_table_rows:
+            tbl = _build_md_table(pending_table_rows, body_style)
+            if tbl is not None:
+                flowables.append(Spacer(1, 4))
+                flowables.append(tbl)
+                flowables.append(Spacer(1, 6))
+            pending_table_rows.clear()
+
     for line in lines:
         stripped = line.strip()
 
-        # 1. Empty line -> separator
+        # Table row detection: line starts and ends with '|' and has multiple cells.
+        if stripped.startswith("|") and stripped.count("|") >= 2:
+            flush_paragraph()
+            pending_table_rows.append(stripped)
+            continue
+        else:
+            flush_table()
+
         if not stripped:
             flush_paragraph()
             continue
 
-        # 2. Heading
         if stripped.startswith("#"):
             flush_paragraph()
             level = 0
@@ -167,14 +237,12 @@ def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[
                 level += 1
             header_text = stripped[level:].strip()
             formatted = _format_inline(header_text)
-            # Map headers: # becomes H2, ## becomes H3 to keep hierarchy clean under H1
             if level == 1:
                 flowables.append(Paragraph(formatted, h2_style))
             else:
                 flowables.append(Paragraph(formatted, h3_style))
             continue
 
-        # 3. List Item
         if stripped.startswith("* ") or stripped.startswith("- ") or re.match(r"^\d+\.\s", stripped):
             flush_paragraph()
             if stripped.startswith("* ") or stripped.startswith("- "):
@@ -188,7 +256,6 @@ def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[
             flowables.append(Paragraph(formatted, bullet_style))
             continue
 
-        # 4. Horizontal Rule
         if stripped in ("---", "***", "___"):
             flush_paragraph()
             hr_table = Table([[""]], colWidths=[6.5 * inch])
@@ -202,10 +269,10 @@ def parse_markdown_to_flowables(text: str, styles_dict: dict[str, Any]) -> list[
             flowables.append(Spacer(1, 4))
             continue
 
-        # 5. Regular text line -> append to current paragraph
         current_paragraph_lines.append(stripped)
 
     flush_paragraph()
+    flush_table()
     return flowables
 
 
@@ -320,33 +387,42 @@ def build_pdf(
 
     # Per-jurisdiction summaries.
     story.append(_para("5. Per-Jurisdiction Summary", h1))
-    rows = [["Jurisdiction", "Limit", "Tissue avg.", "Required tests", "Est. hrs"]]
+    cell_style = ParagraphStyle(
+        "JurisCell", parent=body, fontSize=8.5, leading=11, spaceAfter=0
+    )
+    header_cell_style = ParagraphStyle(
+        "JurisHeader", parent=body, fontSize=9, leading=11, spaceAfter=0,
+        textColor=colors.white, fontName="Helvetica-Bold",
+    )
+    header_labels = ["Jurisdiction", "Limit", "Tissue avg.", "Required tests", "Est. hrs"]
+    rows: list[list[Any]] = [
+        [Paragraph(h, header_cell_style) for h in header_labels]
+    ]
     for region_code, label_tuple in JURISDICTION_LIMITS.items():
         label, limit, avg = label_tuple
         entry = cert_matrix.get(region_code, {})
         tests = entry.get("required_tests", []) if isinstance(entry, dict) else []
         hours = entry.get("estimated_hours", "—") if isinstance(entry, dict) else "—"
-        # Skip jurisdictions that weren't requested (empty test list means "not targeted").
         if not tests:
             continue
+        tests_text = ", ".join(tests[:4]) + ("..." if len(tests) > 4 else "")
         rows.append([
-            label,
-            f"{limit} W/kg",
-            avg,
-            ", ".join(tests[:4]) + ("..." if len(tests) > 4 else ""),
-            str(hours),
+            Paragraph(label, cell_style),
+            Paragraph(f"{limit} W/kg", cell_style),
+            Paragraph(avg, cell_style),
+            Paragraph(tests_text, cell_style),
+            Paragraph(str(hours), cell_style),
         ])
-    j_table = Table(rows, colWidths=[1.3 * inch, 0.8 * inch, 0.8 * inch, 3.0 * inch, 0.7 * inch])
+    j_table = Table(rows, colWidths=[1.1 * inch, 0.7 * inch, 0.7 * inch, 3.3 * inch, 0.6 * inch])
     j_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0b1d4a")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("BOX", (0, 0), (-1, -1), 0.4, colors.grey),
         ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(j_table)
     story.append(Spacer(1, 14))
@@ -362,15 +438,18 @@ def build_pdf(
         story.append(_para("Citations", h2))
         story.append(_para(", ".join(test_plan["citations"]), body))
 
-    # Honest framing footer.
+    # Honest framing footer (uses ReportLab inline tags, NOT _para which escapes them).
     story.append(Spacer(1, 18))
-    story.append(_para(
+    footer_style = ParagraphStyle(
+        "Footer", parent=body, fontSize=9, leading=12, textColor=colors.HexColor("#555555")
+    )
+    story.append(Paragraph(
         "<i>LabPilot is an engineering-intelligence demo. The SAR data above "
         "is generated by a physics-based digital twin simulator and is not a "
         "substitute for a physical SPEAG DASY8 measurement campaign. The "
         "regulatory analysis, citations, test plan structure, and report "
         "assembly are produced by Gemini agents.</i>",
-        body,
+        footer_style,
     ))
 
     doc.build(story)

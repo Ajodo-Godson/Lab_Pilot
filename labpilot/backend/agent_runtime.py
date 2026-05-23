@@ -7,9 +7,11 @@ Routing rules:
   * everything else        -> direct Gemini Flash call (cheap, parallel-safe)
 
 This gives us:
-  - 11 fast, cheap Flash calls for the agentic fan-out (intake, 5 jurisdictions,
-    test plan, 5 report sections)
+  - 12 fast, cheap Flash calls for the agentic fan-out (intake, 5 jurisdictions,
+    test plan, 5 report sections); the two fan-outs of 5 run concurrently via
+    asyncio.gather
   - 1 Antigravity call for autonomous PDF assembly inside a Linux sandbox
+  - 13 agents total
 
 The "best use of managed agents" pitch is honest: we use Antigravity exactly
 where it earns its keep, and standard Flash everywhere else.

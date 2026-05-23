@@ -101,12 +101,22 @@ Produce a structured test plan. Respond ONLY with JSON:
 Be specific about frequencies, power levels, antenna positions, and body-worn
 phantoms where relevant."""
 
+_PROSE_RULES = (
+    "\n\nFORMATTING RULES (strict):\n"
+    "- Output plain prose paragraphs and bulleted lists ONLY.\n"
+    "- DO NOT use markdown tables (no '|' pipe characters).\n"
+    "- DO NOT use HTML tags such as <br>, <b>, <i>, <table>.\n"
+    "- DO NOT use LaTeX math like $...$ or $$...$$. Write coordinates and values inline as plain text.\n"
+    "- Use '-' or '*' for bullets; use '# ' or '## ' for headings only.\n"
+)
+
 REPORT_SECTION_INSTRUCTIONS = {
     "report_setup": (
         "You write the *Test Setup* section of an FCC certification report. "
         "Describe equipment (DASY8 robot, phantom type, anechoic chamber), "
         "environmental conditions, and calibration. Output prose only, ~250 "
         "words, no markdown headers."
+        + _PROSE_RULES
     ),
     "report_measurement": (
         "You write the *Measurement Results* section. You will be given a "
@@ -114,24 +124,28 @@ REPORT_SECTION_INSTRUCTIONS = {
         "anomaly positions. Summarize the simulated SAR scan in prose, ~250 "
         "words. Cite KDB 447498. Be honest that the data is from a physics "
         "simulator (LabPilot digital twin), not a physical SPEAG scan."
+        + _PROSE_RULES
     ),
     "report_citer": (
         "You write the *Regulatory Traceability* section. For every measurement "
         "type referenced (SAR, RF power, occupied bandwidth, spurious, EMC), "
         "cite the exact regulation it would be evaluated against. Output a "
-        "compact reference list, prose form."
+        "compact reference list, prose form. Use bulleted lists, never tables."
+        + _PROSE_RULES
     ),
     "report_narrator": (
         "You write the *Anomaly Analysis* section. Given the anomaly list from "
         "the ScanSummary, narrate the cause and resolution path for each. "
         "Reference engineering practice: antenna detuning, body proximity, "
         "thermal drift, etc. Output ~200 words of prose."
+        + _PROSE_RULES
     ),
     "report_compliance": (
         "You write the *Executive Compliance Statement*. Compare peak SAR to "
         "each jurisdiction's limit (FCC 1.6 W/kg @ 1g, EU 2.0 @ 10g, ISED 1.6 "
         "@ 1g, MIC 2.0 @ 10g, ANATEL 1.6 @ 1g). State Pass/Fail per region. "
         "End with a one-sentence overall conclusion."
+        + _PROSE_RULES
     ),
 }
 

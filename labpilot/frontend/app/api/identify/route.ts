@@ -67,11 +67,6 @@ export async function POST(request: NextRequest) {
               ],
             },
           ],
-          tools: [
-            {
-              google_search: {},
-            },
-          ],
           generationConfig: {
             temperature: 0.2,
             response_mime_type: "application/json",
