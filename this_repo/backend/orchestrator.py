@@ -38,6 +38,11 @@ async def run_project(project_id: str, project: dict[str, Any], queue: asyncio.Q
             "agent_complete",
             {"agent": "intake", "output": profile.model_dump_json()[:300]},
         )
+        await emit(
+            queue,
+            "device_profile",
+            profile.model_dump(),
+        )
 
         # ---- 5 jurisdiction agents in parallel ----
         for region in REGIONS:
