@@ -27,10 +27,10 @@ type Props = {
 const MAX_POINTS = 10000;
 
 function colorForPct(pct: number) {
-  if (pct < 0.4) return "#1044bb";
-  if (pct < 0.65) return "#1a9980";
-  if (pct < 0.82) return "#f09510";
-  if (pct < 0.92) return "#e03010";
+  if (pct < 0.18) return "#1044bb";
+  if (pct < 0.38) return "#1a9980";
+  if (pct < 0.62) return "#f09510";
+  if (pct < 0.85) return "#e03010";
   return "#ff1020";
 }
 
