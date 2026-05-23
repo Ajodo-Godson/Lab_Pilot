@@ -68,6 +68,7 @@ _MOCK_OUTPUTS: dict[str, str] = {
         "device_name": "SmartPatch X1",
         "form_factor": "wearable",
         "body_worn": True,
+        "held_to_head": False,
         "radios": [
             {"chip": "Nordic nRF52840", "type": "BLE", "freq_mhz": 2440, "power_dbm": 8},
             {"chip": "Realtek RTL8723DE", "type": "WiFi+BT", "freq_mhz": 2412, "power_dbm": 20},
