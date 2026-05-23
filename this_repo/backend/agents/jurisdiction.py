@@ -1,22 +1,30 @@
+"""Five jurisdiction managed agents fanned out in parallel."""
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from agent_runtime import invoke_agent_json
+from models import DeviceProfile, JurisdictionResult
+
+REGIONS = ["fcc", "eu", "ca", "jp", "br"]
 
 
-async def run_jurisdiction_parallel(device_profile: dict[str, Any]) -> dict[str, str]:
-    regions = ["fcc", "eu", "ca", "jp", "br"]
-    results = await asyncio.gather(*[_run_single(region, device_profile) for region in regions])
-    return dict(zip(regions, results))
+async def _run_one(region: str, profile: DeviceProfile) -> JurisdictionResult:
+    prompt = (
+        "Analyze this DeviceProfile for your jurisdiction. Use the SKILL.md "
+        "mounted in your environment as the authoritative reference. Use "
+        "Google Search to verify any citation you are unsure about.\n\n"
+        f"DEVICE PROFILE JSON:\n{profile.model_dump_json(indent=2)}\n"
+    )
+    raw = await invoke_agent_json(f"lp-jurisdiction-{region}", prompt)
+    raw.setdefault("region", region)
+    return JurisdictionResult.model_validate(raw)
 
 
-async def _run_single(region: str, device_profile: dict[str, Any]) -> str:
-    await asyncio.sleep(0.4)
-    labels = {
-        "fcc": "FCC: Part 15.247 plus SAR evaluation under KDB 447498.",
-        "eu": "EU: RED, EN 300 328, EN 62311 human exposure assessment.",
-        "ca": "Canada: ISED RSS-247 and RSS-102 SAR evaluation.",
-        "jp": "Japan: MIC/ARIB radio certification path.",
-        "br": "Brazil: ANATEL homologation path.",
-    }
-    return f"{labels[region]} Device={device_profile.get('device_name')}. Placeholder result."
+async def run_jurisdiction_parallel(profile: DeviceProfile) -> dict[str, JurisdictionResult]:
+    results = await asyncio.gather(*[_run_one(r, profile) for r in REGIONS])
+    return {r.region: r for r in results}

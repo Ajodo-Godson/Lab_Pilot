@@ -1,2 +1,42 @@
-labpilot/
+# Secrets — NEVER commit these.
 .env
+.env.local
+.env.*
+**/.env
+**/.env.local
+**/.env.*
+!**/.env.example
+
+# Hackathon org-shared material (not for public push)
+How to use a temporary account*.pdf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+**/venv/
+**/.venv/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Generated PDFs / matplotlib outputs
+outputs/
+**/outputs/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# Old folder kept by mistake
+labpilot/
