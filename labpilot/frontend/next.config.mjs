@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
+// In local dev, optionally load env vars from a parent .env file
+// (the dev workflow mounts a shared .env at the repo root).
+// In production (Cloud Run, etc.) env vars are injected by the platform
+// directly, so this block silently no-ops.
 const rootEnvPath = path.resolve(process.cwd(), "..", ".env");
 
 if (fs.existsSync(rootEnvPath)) {
