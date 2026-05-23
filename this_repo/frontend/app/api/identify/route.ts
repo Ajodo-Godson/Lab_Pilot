@@ -15,9 +15,9 @@ Respond ONLY in this JSON format, no markdown or code blocks:
   "chips": [
     { "chip": "name of chip or standard", "type": "WiFi" | "BLE" | "BT" | "5G" | "LTE", "freq_mhz": number, "power_dbm": number }
   ],
-  "form_factor": "smartphone" | "tablet" | "wearable" | "laptop" | "iot",
-  "held_to_head": false,
-  "body_worn": false,
+  "form_factor": "handset" | "tablet" | "wearable" | "laptop" | "iot" | "speaker" | "gateway" | "other",
+  "held_to_head": true or false,
+  "body_worn": true or false,
   "notes": "one line about the device and its FCC ID if searchable"
 }
 `;
